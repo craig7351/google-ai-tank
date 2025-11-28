@@ -34,6 +34,9 @@ export interface Player {
   isBot: boolean;
   lastShotTime: number;
   dead: boolean;
+  // Buffs (timestamp when it expires)
+  damageBoostUntil: number;
+  speedBoostUntil: number;
 }
 
 export interface Bullet {
@@ -46,6 +49,7 @@ export interface Bullet {
   vx: number;
   vy: number;
   bounces: number;
+  damage: number; // 子彈傷害 (普通20, 加倍40)
 }
 
 export interface Particle {
@@ -59,16 +63,27 @@ export interface Particle {
   size: number;
 }
 
+export type ItemType = 'HEALTH' | 'DOUBLE_DAMAGE' | 'DOUBLE_SPEED';
+
+export interface Item {
+  id: string;
+  x: number;
+  y: number;
+  type: ItemType;
+}
+
 export interface GameState {
   roomId: string;
   isHost: boolean; // Know if we are the authority
   players: Player[];
   bullets: Bullet[];
   particles: Particle[];
+  items: Item[]; // Map items
   walls: { x: number; y: number; w: number; h: number }[];
   myId: string | null;
   regionScores: Record<Region, number>;
   gameTime: number;
+  lastItemSpawnTime: number;
 }
 
 export interface InputState {
@@ -84,7 +99,8 @@ export type NetMessage =
   | { type: 'JOIN'; name: string; region: Region }
   | { type: 'WELCOME'; playerId: string; state: GameState }
   | { type: 'INPUT'; input: InputState }
-  | { type: 'STATE_UPDATE'; state: GameState };
+  | { type: 'STATE_UPDATE'; state: GameState }
+  | { type: 'ERROR'; message: string };
 
 export const REGION_LABELS: Record<Region, string> = {
   Taipei: '台北市',
@@ -137,3 +153,4 @@ export const PLAYER_RADIUS = 20;
 export const BULLET_SPEED = 12;
 export const PLAYER_SPEED = 4;
 export const FIRE_RATE = 500; // ms
+export const ITEM_RADIUS = 15;

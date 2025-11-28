@@ -28,9 +28,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim() && roomId.trim()) {
-      // If creating, use the checkbox state. If joining, allow user to decide if they want to see bots locally
-      // (in a client-side only game, this is the best we can do for "join" without server state)
-      onJoin(name, selectedRegion, roomId, withBots);
+      // If joining, we ignore the local withBots state (it depends on the host)
+      // Passing false for join mode just to be clean, though logic is handled by host state mostly
+      onJoin(name, selectedRegion, roomId, mode === 'create' ? withBots : false);
     }
   };
 
@@ -97,18 +97,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
              </div>
           </div>
 
-          <div className="flex items-center space-x-2 bg-gray-700/30 p-2 rounded border border-gray-600">
-            <input 
-              type="checkbox" 
-              id="withBots" 
-              checked={withBots} 
-              onChange={(e) => setWithBots(e.target.checked)}
-              className="w-5 h-5 accent-green-500 cursor-pointer"
-            />
-            <label htmlFor="withBots" className="text-sm font-bold text-gray-300 cursor-pointer select-none">
-              加入 AI 機器人 (Bots)
-            </label>
-          </div>
+          {mode === 'create' && (
+            <div className="flex items-center space-x-2 bg-gray-700/30 p-2 rounded border border-gray-600">
+                <input 
+                type="checkbox" 
+                id="withBots" 
+                checked={withBots} 
+                onChange={(e) => setWithBots(e.target.checked)}
+                className="w-5 h-5 accent-green-500 cursor-pointer"
+                />
+                <label htmlFor="withBots" className="text-sm font-bold text-gray-300 cursor-pointer select-none">
+                加入 AI 機器人 (Bots)
+                </label>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-bold mb-2 text-gray-300">選擇地區 (同地區互不傷害)</label>

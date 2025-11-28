@@ -11,10 +11,11 @@ import { Peer, DataConnection } from 'peerjs';
 
 // Prefix to avoid collisions on public PeerJS server
 const ROOM_PREFIX = 'rtw-pixel-tank-';
+const MAX_CONNECTIONS = 8; // Limit players to prevent host overload
 
 const MobileControls: React.FC<{ setInput: (updater: (prev: InputState) => InputState) => void }> = ({ setInput }) => {
     return (
-        <div className="fixed bottom-4 left-4 right-4 flex justify-between pointer-events-auto md:hidden touch-none select-none z-50">
+        <div className="fixed bottom-4 left-4 right-4 flex justify-between pointer-events-auto lg:hidden touch-none select-none z-50">
             <div className="relative w-32 h-32 bg-gray-800/50 rounded-full border border-gray-500">
                 <div 
                     className="absolute top-0 left-1/3 w-1/3 h-1/3 bg-gray-600/50 rounded-t active:bg-white/50"
@@ -66,33 +67,11 @@ const App: React.FC = () => {
   const handleJoin = async (name: string, region: Region, roomId: string, withBots: boolean) => {
     setStatusMsg('連接中...');
     
-    // We try to "Create" the room. If it fails (ID taken), we assume "Join" mode.
-    // NOTE: In a real app, we'd be explicit. Here we infer from PeerJS error or user intent.
-    // However, to keep it simple with the UI toggle:
-    // We will use the 'mode' from UI logic implicitly:
-    // If the user clicked "Create", we try to open that ID.
-    // If the user clicked "Join", we connect to that ID.
-    // Since handleJoin doesn't pass the "mode", we'll check if we can claim the ID.
-    
-    // Actually, to respect the UI "Create/Join" separation strictly:
-    // We can't easily know here. But we can try to OPEN the room.
-    // If "unavailable-id", it means room exists -> Join it.
-    // This makes the experience seamless.
-    
     // Initialize Peer
     const peer = new Peer(undefined, {
        debug: 1
     });
     
-    peer.on('open', (id) => {
-        // We have a temporary random ID. Now let's try to connect or claim.
-        // Wait, PeerJS constructor takes ID as first arg.
-        // Let's destroy this and try to claim the ID if we are creating.
-        // To simplify: I'll use the UI flow to dictate strategy.
-        // But `handleJoin` is generic. Let's try to BECOME the host with the specific ID.
-        // If that fails, we are a client.
-    });
-
     // Strategy: Try to be the Host with specific ID.
     const fullRoomId = ROOM_PREFIX + roomId;
     
@@ -117,6 +96,16 @@ const App: React.FC = () => {
 
         // Listen for connections
         hostPeer.on('connection', (conn) => {
+            // CHECK PLAYER LIMIT
+            if (connectionsRef.current.length >= MAX_CONNECTIONS) {
+                console.log('Room full, rejecting connection:', conn.peer);
+                conn.on('open', () => {
+                    conn.send({ type: 'ERROR', message: '房間人數已滿 (Room Full)' } as NetMessage);
+                    setTimeout(() => conn.close(), 500);
+                });
+                return;
+            }
+
             conn.on('open', () => {
                 console.log('Client connected:', conn.peer);
                 connectionsRef.current.push(conn);
@@ -189,12 +178,19 @@ const App: React.FC = () => {
                             };
                             setGameState(stateRef.current);
                         }
+                    } else if (msg.type === 'ERROR') {
+                        alert(msg.message);
+                        conn.close();
+                        window.location.reload();
                     }
                 });
                 
                 conn.on('close', () => {
-                    alert('主機已斷線');
-                    window.location.reload();
+                   // If we were kicked or host died
+                   if (isPlaying) {
+                     alert('與主機的連線中斷');
+                     window.location.reload();
+                   }
                 });
             });
             
@@ -304,8 +300,10 @@ const App: React.FC = () => {
             <UIOverlay gameState={gameState} />
             <MobileControls setInput={setInputState} />
             {/* Connection Status Indicator */}
-            <div className="absolute top-2 right-2 text-xs text-green-500 font-mono">
-                {gameState.isHost ? `HOST (${connectionsRef.current.length} clients)` : `CLIENT (Ping: ok)`}
+            <div className="absolute top-2 right-2 text-xs text-green-500 font-mono pointer-events-none z-50">
+                {gameState.isHost 
+                  ? `HOST (${connectionsRef.current.length}/${MAX_CONNECTIONS} clients)` 
+                  : `CLIENT (Connected)`}
             </div>
           </div>
         )

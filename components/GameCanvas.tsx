@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect } from 'react';
-import { GameState, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, PLAYER_RADIUS, MAP_SIZE, REGION_LABELS } from '../types';
+import { GameState, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, PLAYER_RADIUS, MAP_SIZE, REGION_LABELS, ITEM_RADIUS } from '../types';
 
 interface GameCanvasProps {
   gameState: GameState;
@@ -19,6 +19,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
     const me = gameState.players.find(p => p.id === gameState.myId);
     const camX = me ? me.x - VIEWPORT_WIDTH / 2 : 0;
     const camY = me ? me.y - VIEWPORT_HEIGHT / 2 : 0;
+    const now = Date.now();
 
     // --- Rendering ---
     
@@ -55,7 +56,56 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
         ctx.fillRect(w.x + 5, w.y + 5, w.w - 5, w.h - 5);
     });
 
-    // 5. Particles (Behind tanks)
+    // 5. Items
+    gameState.items.forEach(item => {
+        ctx.save();
+        ctx.translate(item.x, item.y);
+        
+        // Glow
+        ctx.shadowBlur = 15;
+        
+        if (item.type === 'HEALTH') {
+            ctx.fillStyle = '#f43f5e'; // Rose
+            ctx.shadowColor = '#f43f5e';
+            ctx.fillRect(-ITEM_RADIUS, -ITEM_RADIUS, ITEM_RADIUS*2, ITEM_RADIUS*2);
+            // Plus symbol
+            ctx.fillStyle = '#fff';
+            ctx.shadowBlur = 0;
+            ctx.fillRect(-4, -10, 8, 20);
+            ctx.fillRect(-10, -4, 20, 8);
+        } else if (item.type === 'DOUBLE_DAMAGE') {
+            ctx.fillStyle = '#a855f7'; // Purple
+            ctx.shadowColor = '#a855f7';
+            ctx.beginPath();
+            ctx.moveTo(0, -ITEM_RADIUS);
+            ctx.lineTo(ITEM_RADIUS, 0);
+            ctx.lineTo(0, ITEM_RADIUS);
+            ctx.lineTo(-ITEM_RADIUS, 0);
+            ctx.fill();
+            // Sword/Icon (simplified as X)
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-6, -6); ctx.lineTo(6, 6);
+            ctx.moveTo(6, -6); ctx.lineTo(-6, 6);
+            ctx.stroke();
+        } else if (item.type === 'DOUBLE_SPEED') {
+            ctx.fillStyle = '#0ea5e9'; // Cyan
+            ctx.shadowColor = '#0ea5e9';
+            ctx.beginPath();
+            ctx.arc(0, 0, ITEM_RADIUS, 0, Math.PI * 2);
+            ctx.fill();
+            // Arrow
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(-6, 6); ctx.lineTo(8, 0); ctx.lineTo(-6, -6);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    });
+
+    // 6. Particles (Behind tanks)
     gameState.particles.forEach(p => {
         ctx.fillStyle = p.color;
         ctx.globalAlpha = p.life;
@@ -65,13 +115,31 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
         ctx.globalAlpha = 1.0;
     });
 
-    // 6. Tanks (Players)
+    // 7. Tanks (Players)
     gameState.players.forEach(p => {
         if (p.dead) return;
 
         ctx.save();
         ctx.translate(p.x, p.y);
         
+        // Buff Indicators (Aura)
+        if (p.damageBoostUntil > now) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#a855f7';
+            ctx.lineWidth = 2;
+            ctx.arc(0, 0, PLAYER_RADIUS + 8, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        if (p.speedBoostUntil > now) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#0ea5e9';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.arc(0, 0, PLAYER_RADIUS + 5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
         // Name and Region
         ctx.fillStyle = '#fff';
         ctx.font = '10px "Press Start 2P"';
@@ -99,7 +167,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
 
         // Turret
         ctx.fillStyle = '#ccc';
-        ctx.fillRect(0, -5, PLAYER_RADIUS + 10, 10);
+        // Turret gets bigger if heavy damage
+        const turretW = (p.damageBoostUntil > now) ? PLAYER_RADIUS + 15 : PLAYER_RADIUS + 10;
+        const turretH = (p.damageBoostUntil > now) ? 14 : 10;
+        ctx.fillRect(0, -turretH/2, turretW, turretH);
         
         // Center
         ctx.beginPath();
@@ -110,10 +181,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
         ctx.restore();
     });
 
-    // 7. Bullets
+    // 8. Bullets
     gameState.bullets.forEach(b => {
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        // Larger bullets for damage boost
+        const r = b.damage > 20 ? 6 : 4;
+        ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
         // Bullet center color matches player's region color
         ctx.fillStyle = b.color;
         ctx.fill();
@@ -125,7 +198,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
 
     ctx.restore(); // Restore camera transform
 
-    // 8. Minimap Overlay (Top Left)
+    // 9. Minimap Overlay (Top Left)
     const mmScale = 0.1;
     const mmSize = MAP_SIZE * mmScale;
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -133,6 +206,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
     ctx.strokeStyle = '#fff';
     ctx.strokeRect(10, 10, mmSize, mmSize);
     
+    // Minimap items
+    gameState.items.forEach(item => {
+        ctx.fillStyle = item.type === 'HEALTH' ? '#f00' : (item.type === 'DOUBLE_DAMAGE' ? '#a0f' : '#0ff');
+        ctx.fillRect(10 + item.x * mmScale - 1, 10 + item.y * mmScale - 1, 3, 3);
+    });
+
     gameState.players.forEach(p => {
         if(p.dead) return;
         ctx.fillStyle = p.id === gameState.myId ? '#fff' : p.color;

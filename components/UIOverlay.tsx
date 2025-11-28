@@ -18,8 +18,8 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState }) => {
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex justify-between items-start">
       
       {/* Left: Player Status */}
-      <div className="mt-[220px] pointer-events-auto"> 
-        {/* Adjusted margin top to avoid minimap */}
+      {/* On mobile/tablet: Top-left with small margin (covering minimap but clearing center). Desktop: Pushed down below minimap */}
+      <div className="mt-0 lg:mt-[220px] pointer-events-auto origin-top-left scale-75 lg:scale-100"> 
         <div className="bg-black/70 border border-gray-500 p-4 rounded text-white font-mono text-sm shadow-lg backdrop-blur-sm">
            <h3 className="text-yellow-400 font-bold mb-2 pixel-font">STATUS</h3>
            <p className="mb-1">Room: <span className="text-yellow-200">{gameState.roomId}</span></p>
@@ -38,7 +38,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState }) => {
       </div>
 
       {/* Right: Leaderboard */}
-      <div className="bg-black/80 border-2 border-gray-600 p-4 rounded-lg text-white font-mono text-sm min-w-[200px] shadow-xl backdrop-blur-md pointer-events-auto max-h-[400px] overflow-y-auto custom-scrollbar">
+      <div className="bg-black/80 border-2 border-gray-600 p-4 rounded-lg text-white font-mono text-sm min-w-[200px] shadow-xl backdrop-blur-md pointer-events-auto max-h-[400px] overflow-y-auto custom-scrollbar scale-75 lg:scale-100 origin-top-right">
         <h3 className="text-center text-green-400 font-bold mb-2 border-b border-gray-600 pb-1 pixel-font">地區戰況</h3>
         <ul>
           {sortedRegions.map((region, index) => {
