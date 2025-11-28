@@ -1,4 +1,24 @@
-export type Region = 'Taipei' | 'Taichung' | 'Kaohsiung' | 'Tainan' | 'NewTaipei';
+
+export type Region = 
+  | 'Taipei'    
+  | 'NewTaipei' 
+  | 'Taoyuan'   
+  | 'Hsinchu'   
+  | 'Miaoli'
+  | 'Taichung'  
+  | 'Changhua'
+  | 'Nantou'
+  | 'Yunlin'
+  | 'Chiayi'    
+  | 'Tainan'    
+  | 'Kaohsiung' 
+  | 'Pingtung'  
+  | 'Keelung'   
+  | 'Yilan'     
+  | 'Hualien'   
+  | 'Taitung'
+  | 'Penghu'
+  | 'Kinmen';
 
 export interface Player {
   id: string;
@@ -19,11 +39,13 @@ export interface Player {
 export interface Bullet {
   id: string;
   ownerId: string;
+  ownerRegion: Region; // 用於判斷同隊傷害
+  color: string;       // 子彈顏色同玩家
   x: number;
   y: number;
   vx: number;
   vy: number;
-  bounces: number; // Bullets can bounce once
+  bounces: number;
 }
 
 export interface Particle {
@@ -55,12 +77,48 @@ export interface InputState {
   fire: boolean;
 }
 
+export const REGION_LABELS: Record<Region, string> = {
+  Taipei: '台北市',
+  NewTaipei: '新北市',
+  Taoyuan: '桃園市',
+  Hsinchu: '新竹市',
+  Miaoli: '苗栗縣',
+  Taichung: '台中市',
+  Changhua: '彰化縣',
+  Nantou: '南投縣',
+  Yunlin: '雲林縣',
+  Chiayi: '嘉義市',
+  Tainan: '台南市',
+  Kaohsiung: '高雄市',
+  Pingtung: '屏東縣',
+  Keelung: '基隆市',
+  Yilan: '宜蘭縣',
+  Hualien: '花蓮縣',
+  Taitung: '台東縣',
+  Penghu: '澎湖縣',
+  Kinmen: '金門縣',
+};
+
 export const REGION_COLORS: Record<Region, string> = {
-  Taipei: '#10B981',    // Green
-  NewTaipei: '#34D399', // Light Green
-  Taichung: '#3B82F6',  // Blue
-  Tainan: '#F59E0B',    // Orange
-  Kaohsiung: '#EF4444', // Red
+  Taipei: '#22c55e',    // Green
+  NewTaipei: '#86efac', // Light Green
+  Taoyuan: '#14b8a6',   // Teal
+  Hsinchu: '#06b6d4',   // Cyan
+  Miaoli: '#a3e635',    // Lime
+  Taichung: '#3b82f6',  // Blue
+  Changhua: '#60a5fa',  // Light Blue
+  Nantou: '#818cf8',    // Indigo Light
+  Yunlin: '#a78bfa',    // Violet
+  Chiayi: '#6366f1',    // Indigo
+  Tainan: '#f59e0b',    // Orange
+  Kaohsiung: '#ef4444', // Red
+  Pingtung: '#be123c',  // Rose
+  Keelung: '#a855f7',   // Purple
+  Yilan: '#ec4899',     // Pink
+  Hualien: '#10b981',   // Emerald
+  Taitung: '#f97316',   // Orange Red
+  Penghu: '#0ea5e9',    // Sky Blue
+  Kinmen: '#eab308',    // Yellow
 };
 
 export const MAP_SIZE = 2000;

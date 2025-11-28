@@ -1,3 +1,4 @@
+
 import { 
   GameState, Player, Bullet, Particle, InputState, 
   MAP_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BULLET_SPEED, FIRE_RATE, REGION_COLORS, Region 
@@ -17,7 +18,7 @@ const generateWalls = () => {
   walls.push({ x: MAP_SIZE, y: 0, w: 50, h: MAP_SIZE }); // Right
   
   // Random obstacles
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 30; i++) {
     walls.push({
       x: Math.random() * (MAP_SIZE - 200) + 100,
       y: Math.random() * (MAP_SIZE - 200) + 100,
@@ -28,15 +29,62 @@ const generateWalls = () => {
   return walls;
 };
 
+const checkCollision = (rect1: {x: number, y: number, w: number, h: number}, rect2: {x: number, y: number, w: number, h: number}) => {
+  return (
+    rect1.x < rect2.x + rect2.w &&
+    rect1.x + rect1.w > rect2.x &&
+    rect1.y < rect2.y + rect2.h &&
+    rect1.y + rect1.h > rect2.y
+  );
+};
+
+// 安全出生點檢查 (確保不會生在牆壁裡)
+const getSafePosition = (walls: {x: number, y: number, w: number, h: number}[]) => {
+  let safe = false;
+  let x = 0;
+  let y = 0;
+  let attempts = 0;
+
+  // 嘗試 100 次找到一個空位
+  while (!safe && attempts < 100) {
+    x = Math.random() * (MAP_SIZE - 100) + 50;
+    y = Math.random() * (MAP_SIZE - 100) + 50;
+    
+    // 定義坦克的邊界 (稍微比實際半徑大一點，保留緩衝空間)
+    const tankRect = { 
+        x: x - PLAYER_RADIUS - 10, 
+        y: y - PLAYER_RADIUS - 10, 
+        w: (PLAYER_RADIUS * 2) + 20, 
+        h: (PLAYER_RADIUS * 2) + 20 
+    };
+
+    const hitWall = walls.some(w => checkCollision(tankRect, w));
+    if (!hitWall) {
+      safe = true;
+    }
+    attempts++;
+  }
+  
+  // 如果 100 次都失敗，回傳一個地圖中央附近的預設點 (雖然機率很低)
+  if (!safe) {
+      return { x: MAP_SIZE / 2, y: MAP_SIZE / 2 };
+  }
+
+  return { x, y };
+};
+
 // Initial State
 export const initGame = (playerName: string, playerRegion: Region): GameState => {
   const walls = generateWalls();
+  
+  const startPos = getSafePosition(walls);
+
   const player: Player = {
     id: 'me',
     name: playerName,
     region: playerRegion,
-    x: MAP_SIZE / 2,
-    y: MAP_SIZE / 2,
+    x: startPos.x,
+    y: startPos.y,
     rotation: 0,
     hp: 100,
     maxHp: 100,
@@ -49,15 +97,17 @@ export const initGame = (playerName: string, playerRegion: Region): GameState =>
 
   // Generate Bots
   const bots: Player[] = [];
-  const regions: Region[] = ['Taipei', 'Taichung', 'Kaohsiung', 'Tainan', 'NewTaipei'];
-  for (let i = 0; i < 9; i++) {
+  const regions = Object.keys(REGION_COLORS) as Region[];
+  
+  for (let i = 0; i < 14; i++) { // 增加一點 BOT 數量讓地圖熱鬧些
     const reg = regions[Math.floor(Math.random() * regions.length)];
+    const botPos = getSafePosition(walls);
     bots.push({
       id: `bot-${i}`,
       name: `Bot ${i+1}`,
       region: reg,
-      x: Math.random() * MAP_SIZE,
-      y: Math.random() * MAP_SIZE,
+      x: botPos.x,
+      y: botPos.y,
       rotation: Math.random() * Math.PI * 2,
       hp: 100,
       maxHp: 100,
@@ -69,9 +119,8 @@ export const initGame = (playerName: string, playerRegion: Region): GameState =>
     });
   }
 
-  const initialScores: Record<Region, number> = {
-    Taipei: 0, Taichung: 0, Kaohsiung: 0, Tainan: 0, NewTaipei: 0
-  };
+  // Init all scores to 0
+  const initialScores = regions.reduce((acc, r) => ({...acc, [r]: 0}), {} as Record<Region, number>);
 
   return {
     players: [player, ...bots],
@@ -82,15 +131,6 @@ export const initGame = (playerName: string, playerRegion: Region): GameState =>
     regionScores: initialScores,
     gameTime: 0,
   };
-};
-
-const checkCollision = (rect1: {x: number, y: number, w: number, h: number}, rect2: {x: number, y: number, w: number, h: number}) => {
-  return (
-    rect1.x < rect2.x + rect2.w &&
-    rect1.x + rect1.w > rect2.x &&
-    rect1.y < rect2.y + rect2.h &&
-    rect1.y + rect1.h > rect2.y
-  );
 };
 
 export const updateGame = (state: GameState, input: InputState, dt: number): GameState => {
@@ -140,6 +180,8 @@ export const updateGame = (state: GameState, input: InputState, dt: number): Gam
       nextBullets.push({
         id: uuid(),
         ownerId: myPlayer.id,
+        ownerRegion: myPlayer.region, // 記錄地區
+        color: myPlayer.color,        // 子彈顏色跟隨坦克
         x: myPlayer.x + Math.cos(myPlayer.rotation) * (PLAYER_RADIUS + 5),
         y: myPlayer.y + Math.sin(myPlayer.rotation) * (PLAYER_RADIUS + 5),
         vx: Math.cos(myPlayer.rotation) * BULLET_SPEED,
@@ -152,13 +194,11 @@ export const updateGame = (state: GameState, input: InputState, dt: number): Gam
   // --- 2. Bot Logic (Simulated Multiplayer) ---
   nextPlayers.forEach(bot => {
     if (bot.id !== state.myId && !bot.dead) {
-      // Simple AI: Move towards closest enemy or wander
-      // In a real MP game, we'd interpolate network positions here
       if (Math.random() < 0.02) {
          bot.rotation = Math.random() * Math.PI * 2;
       }
 
-      const nextX = bot.x + Math.cos(bot.rotation) * (PLAYER_SPEED * 0.5); // Bots slightly slower
+      const nextX = bot.x + Math.cos(bot.rotation) * (PLAYER_SPEED * 0.5); 
       const nextY = bot.y + Math.sin(bot.rotation) * (PLAYER_SPEED * 0.5);
 
       const botRect = { x: nextX - PLAYER_RADIUS, y: nextY - PLAYER_RADIUS, w: PLAYER_RADIUS * 2, h: PLAYER_RADIUS * 2 };
@@ -166,16 +206,17 @@ export const updateGame = (state: GameState, input: InputState, dt: number): Gam
         bot.x = nextX;
         bot.y = nextY;
       } else {
-        bot.rotation += Math.PI / 2; // Turn on collision
+        bot.rotation += Math.PI / 2; 
       }
 
-      // Bot shoot randomly
       if (Math.random() < 0.015 && now - bot.lastShotTime > FIRE_RATE) {
         bot.lastShotTime = now;
         audioService.playShoot();
         nextBullets.push({
           id: uuid(),
           ownerId: bot.id,
+          ownerRegion: bot.region, // 記錄地區
+          color: bot.color,        // 子彈顏色跟隨坦克
           x: bot.x + Math.cos(bot.rotation) * (PLAYER_RADIUS + 5),
           y: bot.y + Math.sin(bot.rotation) * (PLAYER_RADIUS + 5),
           vx: Math.cos(bot.rotation) * BULLET_SPEED,
@@ -188,11 +229,12 @@ export const updateGame = (state: GameState, input: InputState, dt: number): Gam
 
   // --- 3. Respawn Logic ---
   nextPlayers.forEach(p => {
-    if (p.dead && Math.random() < 0.01) { // Random respawn chance
+    if (p.dead && Math.random() < 0.01) { 
         p.dead = false;
         p.hp = 100;
-        p.x = Math.random() * (MAP_SIZE - 200) + 100;
-        p.y = Math.random() * (MAP_SIZE - 200) + 100;
+        const spawn = getSafePosition(state.walls); // 使用安全重生點檢查
+        p.x = spawn.x;
+        p.y = spawn.y;
         audioService.playSpawn();
     }
   });
@@ -204,36 +246,38 @@ export const updateGame = (state: GameState, input: InputState, dt: number): Gam
     b.x += b.vx;
     b.y += b.vy;
 
-    // Wall Bounce/Destroy
+    // Wall Bounce
     let hitWall = false;
     for (const w of state.walls) {
       if (b.x > w.x && b.x < w.x + w.w && b.y > w.y && b.y < w.y + w.h) {
         hitWall = true;
-        // Simple bounce logic (imperfect but works for simple AABB)
-        // Determine which side was hit based on previous position roughly
-        // For now, just reverse direction and increment bounces
         if (b.bounces < 1) {
              b.vx = -b.vx; 
              b.vy = -b.vy;
              b.bounces++;
-             hitWall = false; // Keep bullet
+             hitWall = false; 
         }
         break;
       }
     }
 
-    if (hitWall) return; // Destroy bullet
+    if (hitWall) return;
 
     // Player Collision
     let hitPlayer = false;
     for (const p of nextPlayers) {
       if (!p.dead && p.id !== b.ownerId) {
+        // --- 同地區不受傷邏輯 (Friendly Fire Protection) ---
+        if (p.region === b.ownerRegion) {
+            // 子彈直接穿過自己人，不做任何事情
+            continue;
+        }
+
         const dist = Math.sqrt((p.x - b.x) ** 2 + (p.y - b.y) ** 2);
         if (dist < PLAYER_RADIUS) {
           hitPlayer = true;
-          p.hp -= 20; // Damage
+          p.hp -= 20; 
           
-          // Particles
           for(let k=0; k<5; k++) {
              nextParticles.push({
                  id: uuid(),
@@ -250,7 +294,6 @@ export const updateGame = (state: GameState, input: InputState, dt: number): Gam
             p.dead = true;
             audioService.playExplosion();
             
-            // Score handling
             const killer = nextPlayers.find(k => k.id === b.ownerId);
             if (killer) {
                 killer.score += 100;
@@ -263,7 +306,6 @@ export const updateGame = (state: GameState, input: InputState, dt: number): Gam
     }
 
     if (!hitPlayer) {
-        // Destroy if out of bounds
         if (b.x < -100 || b.x > MAP_SIZE + 100 || b.y < -100 || b.y > MAP_SIZE + 100) return;
         survivingBullets.push(b);
     }

@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Region, REGION_COLORS } from '../types';
+import { Region, REGION_COLORS, REGION_LABELS } from '../types';
 
 interface LoginScreenProps {
   onJoin: (name: string, region: Region) => void;
@@ -9,7 +10,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
   const [name, setName] = useState('');
   const [selectedRegion, setSelectedRegion] = useState<Region>('Taipei');
   
-  const regions: Region[] = ['Taipei', 'NewTaipei', 'Taichung', 'Tainan', 'Kaohsiung'];
+  const regions = Object.keys(REGION_COLORS) as Region[];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,36 +29,36 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
            }}>
       </div>
 
-      <div className="bg-gray-800 p-8 rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.5)] border-4 border-gray-700 z-10 max-w-md w-full">
-        <h1 className="text-4xl mb-6 text-center text-yellow-400 pixel-font tracking-tighter">TANK WARS</h1>
-        <p className="text-center text-gray-400 mb-8 text-sm">Select your territory and dominate the battlefield.</p>
+      <div className="bg-gray-800 p-8 rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.5)] border-4 border-gray-700 z-10 max-w-2xl w-full">
+        <h1 className="text-4xl mb-6 text-center text-yellow-400 pixel-font tracking-tighter">坦克大戰：台灣爭霸</h1>
+        <p className="text-center text-gray-400 mb-8 text-sm">選擇你的陣營並主宰戰場。</p>
         
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-bold mb-2 text-gray-300">SOLDIER NAME</label>
+            <label className="block text-sm font-bold mb-2 text-gray-300">戰士名稱</label>
             <input 
               type="text" 
               maxLength={12}
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-black border-2 border-gray-600 rounded p-3 text-white focus:border-green-500 focus:outline-none font-mono text-lg"
-              placeholder="Enter name..."
+              placeholder="輸入名稱..."
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-bold mb-2 text-gray-300">ALLEGIANCE (REGION)</label>
-            <div className="grid grid-cols-2 gap-2">
+            <label className="block text-sm font-bold mb-2 text-gray-300">選擇地區 (同地區互不傷害)</label>
+            <div className="grid grid-cols-4 md:grid-cols-5 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
               {regions.map(r => (
                 <button
                   key={r}
                   type="button"
                   onClick={() => setSelectedRegion(r)}
-                  className={`p-2 rounded text-sm font-bold transition-all border-2 ${selectedRegion === r ? 'border-white scale-105' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                  className={`p-2 rounded text-xs font-bold transition-all border-2 truncate flex items-center justify-center ${selectedRegion === r ? 'border-white scale-105 shadow-lg' : 'border-transparent opacity-60 hover:opacity-100'}`}
                   style={{ backgroundColor: REGION_COLORS[r], color: '#fff', textShadow: '1px 1px 0 #000' }}
                 >
-                  {r}
+                  {REGION_LABELS[r]}
                 </button>
               ))}
             </div>
@@ -67,14 +68,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
             type="submit"
             className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-4 rounded border-b-4 border-green-800 active:border-b-0 active:translate-y-1 transition-all pixel-font"
           >
-            DEPLOY TANK
+            加入戰鬥
           </button>
         </form>
       </div>
 
       <div className="mt-8 text-gray-500 text-xs max-w-md text-center">
-        <p>Tip: Use WASD or Arrows to Move. SPACE or Click to Shoot.</p>
-        <p className="mt-2 text-yellow-500/50">Gemini AI Enabled Commentary</p>
+        <p>提示: 使用 WASD 或 方向鍵移動。 空白鍵 或 點擊發射。</p>
+        <p className="mt-2 text-yellow-500/50">Gemini AI 即時戰況播報</p>
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
+
 import React, { useRef, useEffect } from 'react';
-import { GameState, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, PLAYER_RADIUS, MAP_SIZE } from '../types';
+import { GameState, VIEWPORT_WIDTH, VIEWPORT_HEIGHT, PLAYER_RADIUS, MAP_SIZE, REGION_LABELS } from '../types';
 
 interface GameCanvasProps {
   gameState: GameState;
@@ -77,7 +78,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
         ctx.textAlign = 'center';
         ctx.fillText(p.name, 0, -PLAYER_RADIUS - 15);
         ctx.fillStyle = p.color;
-        ctx.fillText(`[${p.region}]`, 0, -PLAYER_RADIUS - 5);
+        // Display Chinese Region Label
+        const regionLabel = REGION_LABELS[p.region] || p.region;
+        ctx.fillText(`[${regionLabel}]`, 0, -PLAYER_RADIUS - 5);
 
         // HP Bar
         ctx.fillStyle = 'red';
@@ -111,9 +114,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
     gameState.bullets.forEach(b => {
         ctx.beginPath();
         ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#FFFF00';
+        // Bullet center color matches player's region color
+        ctx.fillStyle = b.color;
         ctx.fill();
-        ctx.strokeStyle = '#FFAA00';
+        // White outline for visibility
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#fff';
         ctx.stroke();
     });
 

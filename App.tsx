@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import LoginScreen from './components/LoginScreen';
 import GameCanvas from './components/GameCanvas';
@@ -45,12 +46,12 @@ const MobileControls: React.FC<{ setInput: (updater: (prev: InputState) => Input
 const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [aiCommentary, setAiCommentary] = useState<string>("Welcome to the Tank Wars Arena!");
+  const [aiCommentary, setAiCommentary] = useState<string>("歡迎來到坦克大戰競技場！");
   
   // Use refs for game loop to avoid stale closures
   const stateRef = useRef<GameState | null>(null);
   const inputRef = useRef<InputState>({ up: false, down: false, left: false, right: false, fire: false });
-  const reqRef = useRef<number>();
+  const reqRef = useRef<number | undefined>(undefined);
   const lastTimeRef = useRef<number>(0);
   const commentaryTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
@@ -63,11 +64,15 @@ const App: React.FC = () => {
     audioService.startBGM();
 
     // Start AI Commentary Loop (Every 15 seconds)
+    if (commentaryTimerRef.current) clearInterval(commentaryTimerRef.current);
     commentaryTimerRef.current = setInterval(async () => {
        if(stateRef.current) {
            // Find leader
            const scores = stateRef.current.regionScores;
-           const leader = (Object.keys(scores) as Region[]).reduce((a, b) => scores[a] > scores[b] ? a : b);
+           const regions = Object.keys(scores) as Region[];
+           if (regions.length === 0) return;
+           
+           const leader = regions.reduce((a, b) => scores[a] > scores[b] ? a : b);
            const comment = await generateCommentary(scores, leader);
            setAiCommentary(comment);
        }
