@@ -1,18 +1,45 @@
 
-import React from 'react';
-import { GameState, Region, REGION_COLORS, REGION_LABELS } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { GameState, Region, REGION_COLORS, REGION_LABELS, ChatMessage } from '../types';
 
 interface UIOverlayProps {
   gameState: GameState;
+  chatMessages?: ChatMessage[];
+  onSendMessage?: (text: string) => void;
+  setChatFocus?: (focused: boolean) => void;
 }
 
-const UIOverlay: React.FC<UIOverlayProps> = ({ gameState }) => {
+const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onSendMessage, setChatFocus }) => {
+  const [chatInput, setChatInput] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   const sortedRegions = (Object.keys(gameState.regionScores) as Region[])
     .sort((a, b) => gameState.regionScores[b] - gameState.regionScores[a]);
 
   const me = gameState.players.find(p => p.id === gameState.myId);
   const totalPlayers = gameState.players.length;
   const botCount = gameState.players.filter(p => p.isBot).length;
+
+  // Auto scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  const handleChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (chatInput.trim() && onSendMessage) {
+      onSendMessage(chatInput.trim());
+      setChatInput('');
+    }
+  };
+
+  const formatTime = (frames: number) => {
+    // Assuming roughly 60 updates per second in gameLogic
+    const totalSeconds = Math.floor(frames / 60);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="absolute top-0 left-0 w-full h-full pointer-events-none p-4 flex justify-between items-start">
@@ -33,8 +60,13 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState }) => {
         </div>
       </div>
 
-      {/* Center: Removed AI Commentary */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-full max-w-lg text-center">
+      {/* Center: Game Timer */}
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 text-center pointer-events-none">
+          <div className="bg-black/50 px-4 py-2 rounded border border-gray-600">
+             <span className="text-3xl font-mono text-white tracking-widest pixel-font drop-shadow-md">
+                 {formatTime(gameState.gameTime)}
+             </span>
+          </div>
       </div>
 
       {/* Right: Leaderboard */}
@@ -58,9 +90,33 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState }) => {
         </ul>
       </div>
 
+      {/* Bottom Left: Chat Box */}
+      <div className="absolute bottom-4 left-4 w-72 h-48 pointer-events-auto flex flex-col z-40">
+          <div className="flex-1 bg-black/60 border border-gray-600 rounded-t p-2 overflow-y-auto custom-scrollbar text-xs font-mono">
+              {chatMessages.map((msg) => (
+                  <div key={msg.id} className="mb-1 break-words">
+                      <span style={{ color: msg.color }} className="font-bold">{msg.sender}:</span>
+                      <span className="text-white ml-1">{msg.text}</span>
+                  </div>
+              ))}
+              <div ref={chatEndRef} />
+          </div>
+          <form onSubmit={handleChatSubmit} className="flex">
+              <input 
+                  type="text" 
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onFocus={() => setChatFocus && setChatFocus(true)}
+                  onBlur={() => setChatFocus && setChatFocus(false)}
+                  className="flex-1 bg-black/80 border border-t-0 border-gray-600 text-white px-2 py-1 text-sm focus:outline-none focus:border-green-500"
+                  placeholder="按 Enter 聊天..."
+              />
+          </form>
+      </div>
+
       {/* Death Screen */}
       {me?.dead && (
-          <div className="absolute inset-0 flex items-center justify-center bg-red-900/30 z-50">
+          <div className="absolute inset-0 flex items-center justify-center bg-red-900/30 z-50 pointer-events-none">
              <div className="text-center animate-bounce">
                 <h1 className="text-6xl text-red-500 font-bold pixel-font drop-shadow-lg stroke-black">陣亡</h1>
                 <p className="text-white mt-4 text-xl">重生中...</p>

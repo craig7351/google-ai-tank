@@ -101,13 +101,22 @@ export interface InputState {
   fire: boolean;
 }
 
+export interface ChatMessage {
+  id: string;
+  sender: string;
+  text: string;
+  color: string;
+  timestamp: number;
+}
+
 // Network Types
 export type NetMessage = 
   | { type: 'JOIN'; name: string; region: Region }
   | { type: 'WELCOME'; playerId: string; state: GameState }
   | { type: 'INPUT'; input: InputState }
   | { type: 'STATE_UPDATE'; state: GameState }
-  | { type: 'ERROR'; message: string };
+  | { type: 'ERROR'; message: string }
+  | { type: 'CHAT'; message: ChatMessage };
 
 export const MAX_CONNECTIONS = 8;
 

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import LoginScreen from './components/LoginScreen';
 import GameCanvas from './components/GameCanvas';
 import UIOverlay from './components/UIOverlay';
-import { GameState, InputState, Region, NetMessage, GameSettings, MAX_CONNECTIONS } from './types';
+import { GameState, InputState, Region, NetMessage, GameSettings, MAX_CONNECTIONS, ChatMessage } from './types';
 import { initGame, updateGame, addPlayer, removePlayer } from './services/gameLogic';
 import { audioService } from './services/audioService';
 // Import PeerJS from ESM
@@ -115,6 +115,10 @@ const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [statusMsg, setStatusMsg] = useState('');
   
+  // Chat State
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatFocused, setIsChatFocused] = useState(false);
+  
   const stateRef = useRef<GameState | null>(null);
   const inputRef = useRef<InputState>({ up: false, down: false, left: false, right: false, fire: false });
   // Map of ALL inputs (including bots/remote). Host uses this to run physics.
@@ -190,6 +194,14 @@ const App: React.FC = () => {
                     }
                 } else if (msg.type === 'INPUT') {
                     allInputsRef.current[conn.peer] = msg.input;
+                } else if (msg.type === 'CHAT') {
+                    // Host receives chat from client: Update local & Broadcast to others
+                    setChatMessages(prev => [...prev, msg.message]);
+                    connectionsRef.current.forEach(c => {
+                        if (c.peer !== conn.peer && c.open) {
+                            c.send(msg);
+                        }
+                    });
                 }
             });
 
@@ -246,6 +258,8 @@ const App: React.FC = () => {
                         alert(msg.message);
                         conn.close();
                         window.location.reload();
+                    } else if (msg.type === 'CHAT') {
+                        setChatMessages(prev => [...prev, msg.message]);
                     }
                 });
                 
@@ -269,9 +283,37 @@ const App: React.FC = () => {
     });
   };
 
+  const handleSendMessage = (text: string) => {
+      if (!gameState || !gameState.myId) return;
+      const me = gameState.players.find(p => p.id === gameState.myId);
+      const msg: ChatMessage = {
+          id: Math.random().toString(36).substr(2, 9),
+          sender: me?.name || 'Unknown',
+          text,
+          color: me?.color || '#fff',
+          timestamp: Date.now()
+      };
+
+      setChatMessages(prev => [...prev, msg]);
+
+      const netMsg: NetMessage = { type: 'CHAT', message: msg };
+      if (gameState.isHost) {
+          // If host, broadcast to all clients
+          connectionsRef.current.forEach(c => { if (c.open) c.send(netMsg); });
+      } else {
+          // If client, send to host (who will broadcast)
+          if (hostConnRef.current && hostConnRef.current.open) {
+              hostConnRef.current.send(netMsg);
+          }
+      }
+  };
+
   // Keyboard Inputs
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent movement when typing in chat
+      if (isChatFocused) return;
+
       let changed = false;
       if (e.code === 'KeyW' || e.code === 'ArrowUp') { inputRef.current.up = true; changed = true; }
       if (e.code === 'KeyS' || e.code === 'ArrowDown') { inputRef.current.down = true; changed = true; }
@@ -285,6 +327,12 @@ const App: React.FC = () => {
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (isChatFocused) {
+          // Ensure we clear inputs if user focuses chat while moving
+          inputRef.current = { up: false, down: false, left: false, right: false, fire: false };
+          return;
+      }
+
       let changed = false;
       if (e.code === 'KeyW' || e.code === 'ArrowUp') { inputRef.current.up = false; changed = true; }
       if (e.code === 'KeyS' || e.code === 'ArrowDown') { inputRef.current.down = false; changed = true; }
@@ -303,7 +351,7 @@ const App: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [isChatFocused]);
 
   // Game Loop
   useEffect(() => {
@@ -361,7 +409,12 @@ const App: React.FC = () => {
         gameState && (
           <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
             <GameCanvas gameState={gameState} />
-            <UIOverlay gameState={gameState} />
+            <UIOverlay 
+                gameState={gameState} 
+                chatMessages={chatMessages}
+                onSendMessage={handleSendMessage}
+                setChatFocus={setIsChatFocused}
+            />
             <MobileControls setInput={setInputState} />
             {/* Connection Status Indicator */}
             <div className="absolute top-2 right-2 text-xs text-green-500 font-mono pointer-events-none z-50">
