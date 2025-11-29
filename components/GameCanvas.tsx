@@ -101,6 +101,35 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
             ctx.beginPath();
             ctx.moveTo(-6, 6); ctx.lineTo(8, 0); ctx.lineTo(-6, -6);
             ctx.fill();
+        } else if (item.type === 'TRIPLE_SHOT') {
+            ctx.fillStyle = '#facc15'; // Yellow
+            ctx.shadowColor = '#facc15';
+            ctx.beginPath();
+            ctx.moveTo(0, -ITEM_RADIUS);
+            ctx.lineTo(ITEM_RADIUS, ITEM_RADIUS);
+            ctx.lineTo(-ITEM_RADIUS, ITEM_RADIUS);
+            ctx.fill();
+            // 3 dots
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(0, 4, 3, 0, Math.PI * 2);
+            ctx.arc(-5, -2, 3, 0, Math.PI * 2);
+            ctx.arc(5, -2, 3, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (item.type === 'SHIELD') {
+            ctx.fillStyle = '#3b82f6'; // Blue
+            ctx.shadowColor = '#3b82f6';
+            ctx.beginPath();
+            // Shield shape
+            ctx.moveTo(0, ITEM_RADIUS);
+            ctx.quadraticCurveTo(ITEM_RADIUS, 0, ITEM_RADIUS, -ITEM_RADIUS+5);
+            ctx.lineTo(0, -ITEM_RADIUS);
+            ctx.lineTo(-ITEM_RADIUS, -ITEM_RADIUS+5);
+            ctx.quadraticCurveTo(-ITEM_RADIUS, 0, 0, ITEM_RADIUS);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
         }
 
         ctx.restore();
@@ -108,12 +137,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
 
     // 6. Particles (Behind tanks)
     gameState.particles.forEach(p => {
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.life;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
+        if (p.type === 'TEXT' && p.text) {
+             ctx.fillStyle = p.color;
+             ctx.globalAlpha = p.life;
+             ctx.font = `bold ${p.size}px monospace`;
+             ctx.textAlign = 'center';
+             ctx.fillText(p.text, p.x, p.y);
+             ctx.globalAlpha = 1.0;
+        } else {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1.0;
+        }
     });
 
     // 7. Tanks (Players)
@@ -124,6 +162,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
         ctx.translate(p.x, p.y);
         
         // Buff Indicators (Aura)
+        // Shield Aura
+        if (p.shield > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6'; // Blue
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 5;
+            ctx.shadowColor = '#3b82f6';
+            ctx.arc(0, 0, PLAYER_RADIUS + 12, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
         if (p.damageBoostUntil > now) {
             ctx.beginPath();
             ctx.strokeStyle = '#a855f7';
@@ -139,6 +189,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
             ctx.arc(0, 0, PLAYER_RADIUS + 5, 0, Math.PI * 2);
             ctx.stroke();
             ctx.setLineDash([]);
+        }
+        if (p.tripleShotUntil > now) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 1;
+            ctx.arc(0, 0, PLAYER_RADIUS + 10, 0, Math.PI * 2); // Thin yellow line
+            ctx.stroke();
         }
 
         // Ping Display (Above Name)
@@ -164,6 +221,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
         ctx.fillRect(-15, -PLAYER_RADIUS - 35, 30, 4); // Moved up slightly to fit Ping
         ctx.fillStyle = '#0f0';
         ctx.fillRect(-15, -PLAYER_RADIUS - 35, 30 * (p.hp / p.maxHp), 4);
+        
+        // Shield Bar (Overlay on HP)
+        if (p.shield > 0) {
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillRect(-15, -PLAYER_RADIUS - 38, 30 * (Math.min(30, p.shield) / 30), 2);
+        }
 
         ctx.rotate(p.rotation);
 
@@ -176,9 +239,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
 
         // Turret
         ctx.fillStyle = '#ccc';
-        // Turret gets bigger if heavy damage
-        const turretW = (p.damageBoostUntil > now) ? PLAYER_RADIUS + 15 : PLAYER_RADIUS + 10;
+        // Turret gets bigger if heavy damage or triple shot
+        const turretW = (p.damageBoostUntil > now || p.tripleShotUntil > now) ? PLAYER_RADIUS + 15 : PLAYER_RADIUS + 10;
         const turretH = (p.damageBoostUntil > now) ? 14 : 10;
+        
+        if (p.tripleShotUntil > now) {
+            // Draw 3 barrels visual
+            ctx.fillRect(0, -turretH/2 - 4, turretW-5, 4);
+            ctx.fillRect(0, -turretH/2 + 4, turretW-5, 4);
+        }
         ctx.fillRect(0, -turretH/2, turretW, turretH);
         
         // Center
@@ -217,7 +286,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ gameState }) => {
     
     // Minimap items
     gameState.items.forEach(item => {
-        ctx.fillStyle = item.type === 'HEALTH' ? '#f00' : (item.type === 'DOUBLE_DAMAGE' ? '#a0f' : '#0ff');
+        let c = '#fff';
+        if (item.type === 'HEALTH') c = '#f00';
+        else if (item.type === 'DOUBLE_DAMAGE') c = '#a0f';
+        else if (item.type === 'DOUBLE_SPEED') c = '#0ff';
+        else if (item.type === 'TRIPLE_SHOT') c = '#ff0';
+        else if (item.type === 'SHIELD') c = '#00f';
+        
+        ctx.fillStyle = c;
         ctx.fillRect(10 + item.x * mmScale - 1, 10 + item.y * mmScale - 1, 3, 3);
     });
 

@@ -2,7 +2,7 @@
 
 import { 
   GameState, Player, Bullet, Particle, InputState, Item, ItemType, GameSettings,
-  MAP_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BULLET_SPEED, FIRE_RATE, REGION_COLORS, Region, ITEM_RADIUS 
+  MAP_SIZE, PLAYER_RADIUS, PLAYER_SPEED, BULLET_SPEED, FIRE_RATE, REGION_COLORS, Region, ITEM_RADIUS, WIN_SCORE 
 } from '../types';
 import { audioService } from './audioService';
 
@@ -112,6 +112,8 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, r
     dead: false,
     damageBoostUntil: 0,
     speedBoostUntil: 0,
+    tripleShotUntil: 0,
+    shield: 0,
     ping: 0,
   };
 
@@ -139,6 +141,8 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, r
         dead: false,
         damageBoostUntil: 0,
         speedBoostUntil: 0,
+        tripleShotUntil: 0,
+        shield: 0,
         ping: 0,
       });
     }
@@ -161,6 +165,8 @@ export const initGame = (hostName: string, hostRegion: Region, roomId: string, r
     regionScores: initialScores,
     gameTime: 0,
     lastItemSpawnTime: 0,
+    gameOver: false,
+    winnerRegion: null,
   };
 };
 
@@ -182,6 +188,8 @@ export const addPlayer = (state: GameState, playerId: string, name: string, regi
         dead: false,
         damageBoostUntil: 0,
         speedBoostUntil: 0,
+        tripleShotUntil: 0,
+        shield: 0,
         ping: 0,
     };
     return {
@@ -199,14 +207,31 @@ export const removePlayer = (state: GameState, playerId: string): GameState => {
 
 // Main Loop (HOST ONLY RUNS THIS)
 export const updateGame = (state: GameState, inputs: Record<string, InputState>, dt: number): GameState => {
+  if (state.gameOver) return state; // Stop updates if game over
+
   const now = Date.now();
   let nextPlayers = state.players.map(p => ({ ...p }));
   let nextBullets = state.bullets.map(b => ({ ...b }));
   let nextParticles = state.particles.map(p => ({ ...p }));
   let nextItems = state.items.map(i => ({ ...i }));
   const nextRegionScores = { ...state.regionScores };
+  let winnerRegion = state.winnerRegion;
+  let gameOver = state.gameOver;
 
-  // --- 0. Item Spawning Logic (Using Settings) ---
+  // --- 0. Win Condition ---
+  const regions = Object.keys(nextRegionScores) as Region[];
+  for(const r of regions) {
+      if (nextRegionScores[r] >= WIN_SCORE) {
+          gameOver = true;
+          winnerRegion = r;
+          break;
+      }
+  }
+  if (gameOver) {
+      return { ...state, gameOver, winnerRegion };
+  }
+
+  // --- 1. Item Spawning Logic (Using Settings) ---
   const spawnRate = state.settings.itemSpawnInterval;
   let nextLastItemSpawnTime = state.lastItemSpawnTime;
   
@@ -216,8 +241,15 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
           const spawn = getSafePosition(state.walls);
           const randType = Math.random();
           let type: ItemType = 'HEALTH';
-          if (randType > 0.4 && randType <= 0.7) type = 'DOUBLE_DAMAGE';
-          if (randType > 0.7) type = 'DOUBLE_SPEED';
+          // 40% Health
+          // 20% Double Damage
+          // 20% Double Speed
+          // 10% Triple Shot
+          // 10% Shield
+          if (randType > 0.4 && randType <= 0.6) type = 'DOUBLE_DAMAGE';
+          else if (randType > 0.6 && randType <= 0.8) type = 'DOUBLE_SPEED';
+          else if (randType > 0.8 && randType <= 0.9) type = 'TRIPLE_SHOT';
+          else if (randType > 0.9) type = 'SHIELD';
 
           nextItems.push({
               id: uuid(),
@@ -228,7 +260,38 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
       }
   }
 
-  // --- 1. Player Movement & Actions (For ALL players based on input map) ---
+  const fireBullet = (p: Player) => {
+    p.lastShotTime = now;
+    audioService.playShoot();
+    
+    const damage = (p.damageBoostUntil > now) ? 40 : 20;
+    const isTriple = (p.tripleShotUntil > now);
+
+    const shots = [];
+    shots.push(0); // Center
+    if (isTriple) {
+        shots.push(-0.25); // Left ~15 deg
+        shots.push(0.25);  // Right ~15 deg
+    }
+
+    shots.forEach(angleOffset => {
+        const finalAngle = p.rotation + angleOffset;
+        nextBullets.push({
+            id: uuid(),
+            ownerId: p.id,
+            ownerRegion: p.region,
+            color: p.color,
+            x: p.x + Math.cos(p.rotation) * (PLAYER_RADIUS + 5),
+            y: p.y + Math.sin(p.rotation) * (PLAYER_RADIUS + 5),
+            vx: Math.cos(finalAngle) * BULLET_SPEED,
+            vy: Math.sin(finalAngle) * BULLET_SPEED,
+            bounces: 0,
+            damage
+        });
+    });
+  };
+
+  // --- 2. Player Movement & Actions (For ALL players based on input map) ---
   nextPlayers.forEach(p => {
     if (!p.isBot && !p.dead) {
         const input = inputs[p.id];
@@ -265,32 +328,16 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
 
             // Fire
             if (input.fire && now - p.lastShotTime > FIRE_RATE) {
-                p.lastShotTime = now;
-                audioService.playShoot();
-                
-                const damage = (p.damageBoostUntil > now) ? 40 : 20;
-
-                nextBullets.push({
-                    id: uuid(),
-                    ownerId: p.id,
-                    ownerRegion: p.region,
-                    color: p.color,
-                    x: p.x + Math.cos(p.rotation) * (PLAYER_RADIUS + 5),
-                    y: p.y + Math.sin(p.rotation) * (PLAYER_RADIUS + 5),
-                    vx: Math.cos(p.rotation) * BULLET_SPEED,
-                    vy: Math.sin(p.rotation) * BULLET_SPEED,
-                    bounces: 0,
-                    damage
-                });
+                fireBullet(p);
             }
         }
     }
   });
 
-  // --- 2. Bot Logic ---
+  // --- 3. Bot Logic ---
   nextPlayers.forEach(bot => {
     if (bot.isBot && !bot.dead) {
-      // Bot random behavior also gets buffs? Sure, why not
+      // Bot random behavior also gets buffs
       const speedMultiplier = (bot.speedBoostUntil > now) ? 2 : 1;
       const currentSpeed = (PLAYER_SPEED * 0.5) * speedMultiplier;
 
@@ -307,26 +354,12 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
       }
 
       if (Math.random() < 0.015 && now - bot.lastShotTime > FIRE_RATE) {
-        bot.lastShotTime = now;
-        audioService.playShoot();
-        const damage = (bot.damageBoostUntil > now) ? 40 : 20;
-        nextBullets.push({
-          id: uuid(),
-          ownerId: bot.id,
-          ownerRegion: bot.region,
-          color: bot.color,
-          x: bot.x + Math.cos(bot.rotation) * (PLAYER_RADIUS + 5),
-          y: bot.y + Math.sin(bot.rotation) * (PLAYER_RADIUS + 5),
-          vx: Math.cos(bot.rotation) * BULLET_SPEED,
-          vy: Math.sin(bot.rotation) * BULLET_SPEED,
-          bounces: 0,
-          damage
-        });
+        fireBullet(bot);
       }
     }
   });
 
-  // --- 3. Item Collection Logic ---
+  // --- 4. Item Collection Logic ---
   // Check collisions between living players and items
   const buffDuration = state.settings.buffDuration;
   nextPlayers.forEach(p => {
@@ -344,19 +377,25 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
                       p.damageBoostUntil = now + buffDuration;
                   } else if (item.type === 'DOUBLE_SPEED') {
                       p.speedBoostUntil = now + buffDuration;
+                  } else if (item.type === 'TRIPLE_SHOT') {
+                      p.tripleShotUntil = now + buffDuration;
+                  } else if (item.type === 'SHIELD') {
+                      p.shield = 30; // Grant 30 Shield (not stacking duration, just resetting value)
                   }
               }
           }
       }
   });
 
-  // --- 4. Respawn Logic ---
+  // --- 5. Respawn Logic ---
   nextPlayers.forEach(p => {
     if (p.dead && Math.random() < 0.01) { 
         p.dead = false;
         p.hp = 100;
+        p.shield = 0;
         p.damageBoostUntil = 0;
         p.speedBoostUntil = 0;
+        p.tripleShotUntil = 0;
         const spawn = getSafePosition(state.walls); 
         p.x = spawn.x;
         p.y = spawn.y;
@@ -364,7 +403,7 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
     }
   });
 
-  // --- 5. Bullet Physics ---
+  // --- 6. Bullet Physics ---
   const survivingBullets: Bullet[] = [];
   nextBullets.forEach(b => {
     b.x += b.vx;
@@ -391,27 +430,93 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
         const dist = Math.sqrt((p.x - b.x) ** 2 + (p.y - b.y) ** 2);
         if (dist < PLAYER_RADIUS) {
           hitPlayer = true;
-          // Apply bullet specific damage
-          p.hp -= b.damage; 
-
-          for(let k=0; k<5; k++) {
-             nextParticles.push({
-                 id: uuid(),
-                 x: b.x, y: b.y,
-                 vx: (Math.random() - 0.5) * 5,
-                 vy: (Math.random() - 0.5) * 5,
-                 life: 1.0,
-                 color: p.color,
-                 size: Math.random() * 4 + 2
-             });
+          
+          // --- Damage Calculation with Shield ---
+          let remainingDamage = b.damage;
+          
+          if (p.shield > 0) {
+              const absorbed = Math.min(p.shield, remainingDamage);
+              p.shield -= absorbed;
+              remainingDamage -= absorbed;
+              
+              // Shield Hit Effect
+              for(let k=0; k<3; k++) {
+                nextParticles.push({
+                    id: uuid(),
+                    x: b.x, y: b.y,
+                    vx: (Math.random() - 0.5) * 3,
+                    vy: (Math.random() - 0.5) * 3,
+                    life: 0.5,
+                    color: '#06b6d4', // Cyan
+                    size: Math.random() * 2 + 1,
+                    type: 'CIRCLE'
+                });
+             }
           }
+
+          if (remainingDamage > 0) {
+            p.hp -= remainingDamage;
+            // Blood/Hit Effect
+            for(let k=0; k<5; k++) {
+                nextParticles.push({
+                    id: uuid(),
+                    x: b.x, y: b.y,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    life: 1.0,
+                    color: p.color,
+                    size: Math.random() * 4 + 2,
+                    type: 'CIRCLE'
+                });
+             }
+          }
+
           if (p.hp <= 0) {
             p.dead = true;
             audioService.playExplosion();
+            
+            // Death Particles
+            for(let k=0; k<20; k++) {
+                 nextParticles.push({
+                    id: uuid(),
+                    x: p.x, y: p.y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.5,
+                    color: '#ff0000',
+                    size: Math.random() * 5 + 3,
+                    type: 'CIRCLE'
+                });
+            }
+
+            // Death Text Effect (KILL)
+            nextParticles.push({
+                id: uuid(),
+                x: p.x, y: p.y - 20,
+                vx: 0, vy: -1, // Float up
+                life: 2.0,
+                color: '#fff',
+                size: 20,
+                type: 'TEXT',
+                text: 'KILL'
+            });
+
             const killer = nextPlayers.find(k => k.id === b.ownerId);
             if (killer) {
                 killer.score += 100;
                 nextRegionScores[killer.region] += 100;
+
+                // Score Text Effect (+100)
+                nextParticles.push({
+                    id: uuid(),
+                    x: killer.x, y: killer.y - 20,
+                    vx: 0, vy: -1.5,
+                    life: 1.5,
+                    color: '#fbbf24', // Gold
+                    size: 14,
+                    type: 'TEXT',
+                    text: '+100'
+                });
             }
           }
           break;
@@ -423,12 +528,12 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
     }
   });
 
-  // --- 6. Particles ---
+  // --- 7. Particles ---
   const survivingParticles: Particle[] = [];
   nextParticles.forEach(p => {
       p.x += p.vx;
       p.y += p.vy;
-      p.life -= 0.05;
+      p.life -= 0.03; // Slower fade for text visibility
       if (p.life > 0) survivingParticles.push(p);
   });
 
@@ -441,5 +546,7 @@ export const updateGame = (state: GameState, inputs: Record<string, InputState>,
     regionScores: nextRegionScores,
     gameTime: state.gameTime + dt,
     lastItemSpawnTime: nextLastItemSpawnTime,
+    gameOver,
+    winnerRegion
   };
 };

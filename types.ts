@@ -38,6 +38,9 @@ export interface Player {
   // Buffs (timestamp when it expires)
   damageBoostUntil: number;
   speedBoostUntil: number;
+  // New Items
+  tripleShotUntil: number; // Timestamp
+  shield: number; // HP amount
   ping: number; // Latency in ms
 }
 
@@ -54,6 +57,8 @@ export interface Bullet {
   damage: number; // 子彈傷害 (普通20, 加倍40)
 }
 
+export type ParticleType = 'CIRCLE' | 'TEXT';
+
 export interface Particle {
   id: string;
   x: number;
@@ -63,9 +68,11 @@ export interface Particle {
   life: number;
   color: string;
   size: number;
+  type: ParticleType;
+  text?: string;
 }
 
-export type ItemType = 'HEALTH' | 'DOUBLE_DAMAGE' | 'DOUBLE_SPEED';
+export type ItemType = 'HEALTH' | 'DOUBLE_DAMAGE' | 'DOUBLE_SPEED' | 'TRIPLE_SHOT' | 'SHIELD';
 
 export interface Item {
   id: string;
@@ -94,6 +101,8 @@ export interface GameState {
   regionScores: Record<Region, number>;
   gameTime: number;
   lastItemSpawnTime: number;
+  gameOver: boolean;
+  winnerRegion: Region | null;
 }
 
 export interface InputState {
@@ -132,6 +141,7 @@ export type NetMessage =
   | { type: 'PONG'; timestamp: number };
 
 export const MAX_CONNECTIONS = 8;
+export const WIN_SCORE = 3000;
 
 export const REGION_LABELS: Record<Region, string> = {
   Taipei: '台北市',

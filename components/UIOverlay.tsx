@@ -1,7 +1,7 @@
 
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GameState, Region, REGION_COLORS, REGION_LABELS, ChatMessage } from '../types';
+import { GameState, Region, REGION_COLORS, REGION_LABELS, ChatMessage, WIN_SCORE } from '../types';
 
 interface UIOverlayProps {
   gameState: GameState;
@@ -60,6 +60,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
            {gameState.roomName && <p className="mb-1 text-xs text-gray-400">ID: {gameState.roomId}</p>}
            <p className="mb-1">Name: <span style={{ color: me?.color }}>{me?.name}</span></p>
            <p className="mb-1">HP: {Math.max(0, me?.hp || 0)}/100</p>
+           {me?.shield && me.shield > 0 ? <p className="mb-1 text-blue-400">Shield: {me.shield}</p> : null}
            <p className="mb-1">Score: {me?.score}</p>
            {me?.id !== 'host' && !me?.isBot && (
                <p className="mb-1">Ping: <span className={getPingColor(me?.ping || 0)}>{me?.ping || 0}ms</span></p>
@@ -77,6 +78,7 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
              <span className="text-3xl font-mono text-white tracking-widest pixel-font drop-shadow-md">
                  {formatTime(gameState.gameTime)}
              </span>
+             <div className="text-xs text-gray-400 mt-1">Goal: {WIN_SCORE}</div>
           </div>
       </div>
 
@@ -86,15 +88,24 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
         <ul>
           {sortedRegions.map((region, index) => {
             if (gameState.regionScores[region] === 0 && index > 4) return null; // 簡化顯示：0分的且排名靠後的隱藏
+            const score = gameState.regionScores[region];
+            const progress = Math.min(100, (score / WIN_SCORE) * 100);
+            
             return (
-            <li key={region} className="flex justify-between items-center py-1">
-              <span className="flex items-center">
-                 <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: REGION_COLORS[region]}}></span>
-                 <span className={`${index === 0 ? 'text-yellow-300 font-bold' : 'text-gray-300'}`}>
-                    {index + 1}. {REGION_LABELS[region] || region}
-                 </span>
-              </span>
-              <span className="font-bold">{gameState.regionScores[region]}</span>
+            <li key={region} className="flex flex-col py-1 border-b border-gray-800">
+              <div className="flex justify-between items-center">
+                  <span className="flex items-center">
+                    <span className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: REGION_COLORS[region]}}></span>
+                    <span className={`${index === 0 ? 'text-yellow-300 font-bold' : 'text-gray-300'}`}>
+                        {index + 1}. {REGION_LABELS[region] || region}
+                    </span>
+                  </span>
+                  <span className="font-bold">{score}</span>
+              </div>
+              {/* Progress Bar for Win Condition */}
+              <div className="w-full bg-gray-700 h-1 mt-1 rounded-full overflow-hidden">
+                  <div className="h-full bg-yellow-500 transition-all duration-500" style={{ width: `${progress}%` }}></div>
+              </div>
             </li>
             )
           })}
@@ -126,12 +137,31 @@ const UIOverlay: React.FC<UIOverlayProps> = ({ gameState, chatMessages = [], onS
       </div>
 
       {/* Death Screen */}
-      {me?.dead && (
+      {!gameState.gameOver && me?.dead && (
           <div className="absolute inset-0 flex items-center justify-center bg-red-900/30 z-50 pointer-events-none">
              <div className="text-center animate-bounce">
                 <h1 className="text-6xl text-red-500 font-bold pixel-font drop-shadow-lg stroke-black">陣亡</h1>
                 <p className="text-white mt-4 text-xl">重生中...</p>
              </div>
+          </div>
+      )}
+
+      {/* Game Over Screen */}
+      {gameState.gameOver && gameState.winnerRegion && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-[100] pointer-events-auto">
+              <div className="bg-gray-800 border-4 border-yellow-500 p-10 rounded-xl text-center shadow-2xl animate-pulse">
+                  <h1 className="text-5xl text-yellow-400 font-bold mb-6 pixel-font">GAME OVER</h1>
+                  <h2 className="text-3xl text-white mb-4">勝利地區</h2>
+                  <div className="text-6xl font-bold mb-8" style={{ color: REGION_COLORS[gameState.winnerRegion] }}>
+                      {REGION_LABELS[gameState.winnerRegion]}
+                  </div>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-8 rounded text-xl border-b-4 border-green-800 active:border-b-0 active:translate-y-1 transition-all"
+                  >
+                      再戰一場 (重新整理)
+                  </button>
+              </div>
           </div>
       )}
     </div>
