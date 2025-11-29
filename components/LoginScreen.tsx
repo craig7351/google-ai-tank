@@ -19,6 +19,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
   const [botCount, setBotCount] = useState(5);
   const [spawnInterval, setSpawnInterval] = useState(5); // seconds
   const [buffDuration, setBuffDuration] = useState(15); // seconds
+  const [enableAICommentary, setEnableAICommentary] = useState(false);
 
   // Lobby State
   const [scriptUrl, setScriptUrlState] = useState(getSavedScriptUrl());
@@ -61,6 +62,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
           botCount: mode === 'create' ? botCount : 0, // Joiners ignore this, host decides
           itemSpawnInterval: spawnInterval * 1000,
           buffDuration: buffDuration * 1000,
+          enableAICommentary: mode === 'create' ? enableAICommentary : false,
       };
       // Pass roomName only if creating
       onJoin(name, selectedRegion, safeRoomId, mode === 'create' ? roomName : '', settings);
@@ -178,6 +180,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onJoin }) => {
                             type="range" min="5" max="30" step="1"
                             value={buffDuration} onChange={(e) => setBuffDuration(parseInt(e.target.value))}
                             className="w-1/2 accent-purple-500"
+                        />
+                    </div>
+                    <div className="flex items-center justify-between border-t border-gray-600 pt-3">
+                        <label className="text-sm font-bold text-gray-300">啟用 AI 戰情廣播 (Gemini)</label>
+                        <input 
+                            type="checkbox"
+                            checked={enableAICommentary}
+                            onChange={(e) => setEnableAICommentary(e.target.checked)}
+                            className="w-5 h-5 accent-yellow-500"
                         />
                     </div>
                 </div>

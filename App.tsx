@@ -8,6 +8,7 @@ import { GameState, InputState, Region, NetMessage, GameSettings, MAX_CONNECTION
 import { initGame, updateGame, addPlayer, removePlayer } from './services/gameLogic';
 import { audioService } from './services/audioService';
 import { heartbeatRoom } from './services/lobbyService';
+import { generateCommentary } from './services/geminiService';
 // Import PeerJS from ESM
 import { Peer, DataConnection } from 'peerjs';
 
@@ -143,6 +144,9 @@ const App: React.FC = () => {
   // Chat State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatFocused, setIsChatFocused] = useState(false);
+
+  // AI Commentary State
+  const [aiCommentary, setAiCommentary] = useState('');
   
   const stateRef = useRef<GameState | null>(null);
   const inputRef = useRef<InputState>({ up: false, down: false, left: false, right: false, fire: false });
@@ -323,6 +327,8 @@ const App: React.FC = () => {
                     } else if (msg.type === 'PING') {
                         // Client received PING: immediately PONG back
                         conn.send({ type: 'PONG', timestamp: msg.timestamp } as NetMessage);
+                    } else if (msg.type === 'COMMENTARY') {
+                        setAiCommentary(msg.text);
                     }
                 });
                 
@@ -370,6 +376,30 @@ const App: React.FC = () => {
           }
       }
   };
+
+  // AI Commentary Loop (Host Only)
+  useEffect(() => {
+    if (!isPlaying || !gameState?.isHost || !gameState.settings.enableAICommentary) return;
+
+    const interval = setInterval(async () => {
+        if (!stateRef.current) return;
+        const scores = stateRef.current.regionScores;
+        const leading = (Object.keys(scores) as Region[]).reduce((a, b) => scores[a] > scores[b] ? a : b);
+        
+        try {
+            const text = await generateCommentary(scores, leading);
+            setAiCommentary(text);
+
+            // Broadcast to clients
+            const msg: NetMessage = { type: 'COMMENTARY', text };
+            connectionsRef.current.forEach(c => { if(c.open) c.send(msg); });
+        } catch (e) {
+            console.error("AI Gen Error", e);
+        }
+    }, 15000); // 15 seconds
+
+    return () => clearInterval(interval);
+  }, [isPlaying, gameState?.isHost, gameState?.settings.enableAICommentary]);
 
   // Keyboard Inputs
   useEffect(() => {
@@ -479,6 +509,7 @@ const App: React.FC = () => {
                 chatMessages={chatMessages}
                 onSendMessage={handleSendMessage}
                 setChatFocus={setIsChatFocused}
+                aiCommentary={aiCommentary}
             />
             <MobileControls setInput={setInputState} />
             {/* Connection Status Indicator */}
